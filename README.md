@@ -1,8 +1,8 @@
 # ytdlp-operator
-// TODO(user): Add simple overview of use/purpose
+A Kubernetes operator that manages automated downloading and processing of video content using yt-dlp
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+This operator allows you to define Download resources in your Kubernetes cluster that automatically trigger video downloads using yt-dlp. It supports format selection, post-processing options like audio extraction, and direct uploads to S3 storage. The operator creates Kubernetes Jobs to handle the downloads asynchronously.
 
 ## Getting Started
 
@@ -13,10 +13,11 @@
 - Access to a Kubernetes v1.11.3+ cluster.
 
 ### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+**Build and push your image:**
 
 ```sh
-make docker-build docker-push IMG=<some-registry>/ytdlp-operator:tag
+export IMG="ytdlp-operator:latest"
+make docker-build docker-push IMG=$IMG
 ```
 
 **NOTE:** This image ought to be published in the personal registry you specified.

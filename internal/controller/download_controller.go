@@ -33,7 +33,7 @@ import (
 
 // Helper function to build the command-line arguments for yt-dlp
 func buildYtDlpArgs(spec downloadv1.DownloadSpec) []string {
-	args := []string{"yt-dlp", "--no-mtime", "--ignore-errors", "-o", "/data/%(title)s.%(ext)s"}
+	args := []string{"--no-mtime", "--ignore-errors", "-o", "/data/%(title)s.%(ext)s"}
 
 	// 1. Format Selection
 	if spec.FormatSelection != "" {
@@ -110,8 +110,8 @@ func (r *DownloadReconciler) newDownloadJob(download *downloadv1.Download, jobNa
 							Command: []string{"sh", "-c"},
 							Args: []string{
 								"apk add --no-cache python3 py3-pip ffmpeg && " +
-									"pip install yt-dlp && " +
-									"yt-dlp --no-mtime --ignore-errors -o /data/%(title)s.%(ext)s " + download.Spec.InputURL,
+									"pip install yt-dlp --break-system-packages && " +
+									"yt-dlp --no-mtime --ignore-errors -o '/data/%(title)s.%(ext)s' " + download.Spec.InputURL,
 							},
 							Env:             s3EnvVars,
 							ImagePullPolicy: corev1.PullIfNotPresent,
