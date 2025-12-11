@@ -65,30 +65,63 @@ func buildYtDlpArgs(spec downloadv1.DownloadSpec) []string {
 
 // newDownloadJob creates the Kubernetes Job object for the download worker.
 func (r *DownloadReconciler) newDownloadJob(download *downloadv1.Download, jobName string) (*batchv1.Job, error) {
+	// Build the download command
+	downloadCmd := "apk add --no-cache python3 py3-pip ffmpeg && " +
+		"pip install --break-system-packages yt-dlp && " +
+		"yt-dlp --no-mtime --ignore-errors -o '/data/%(title)s.%(ext)s' " + download.Spec.InputURL
 
-	// Environment variables for S3 credentials
-	s3EnvVars := []corev1.EnvVar{
-		{
-			Name: "AWS_ACCESS_KEY_ID",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: download.Spec.Output.S3.SecretRef},
-					Key:                  "accessKeyID",
+	// Conditionally add S3 upload or keep local
+	var s3EnvVars []corev1.EnvVar
+	var volumes []corev1.Volume
+	var volumeMounts []corev1.VolumeMount
+
+	if download.Spec.Output.S3 != nil {
+		// S3 output: add awscli and upload command
+		downloadCmd += " && apk add --no-cache awscli && " +
+			"aws s3 cp /data/* s3://" + download.Spec.Output.S3.Bucket + "/" + download.Spec.Output.S3.Key + " || true"
+
+		s3EnvVars = []corev1.EnvVar{
+			{
+				Name: "AWS_ACCESS_KEY_ID",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: download.Spec.Output.S3.SecretRef},
+						Key:                  "accessKeyID",
+					},
 				},
 			},
-		},
-		{
-			Name: "AWS_SECRET_ACCESS_KEY",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: download.Spec.Output.S3.SecretRef},
-					Key:                  "secretAccessKey",
+			{
+				Name: "AWS_SECRET_ACCESS_KEY",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: download.Spec.Output.S3.SecretRef},
+						Key:                  "secretAccessKey",
+					},
 				},
 			},
-		},
+		}
+	} else {
+		// Local storage: use HostPath volume mounted to Downloads
+		hostPathType := corev1.HostPathDirectoryOrCreate
+		volumes = []corev1.Volume{
+			{
+				Name: "downloads",
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/home/k3y/Downloads",
+						Type: &hostPathType,
+					},
+				},
+			},
+		}
+		volumeMounts = []corev1.VolumeMount{
+			{
+				Name:      "downloads",
+				MountPath: "/data",
+			},
+		}
 	}
 
-	// Define a termination grace period to ensure yt-dlp finishes S3 upload on time
 	var terminationGracePeriodSeconds int64 = 60
 
 	job := &batchv1.Job{
@@ -101,19 +134,15 @@ func (r *DownloadReconciler) newDownloadJob(download *downloadv1.Download, jobNa
 				Spec: corev1.PodSpec{
 					RestartPolicy:                 corev1.RestartPolicyOnFailure,
 					TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
+					Volumes:                       volumes,
 					Containers: []corev1.Container{
 						{
-							Name: "yt-dlp-worker",
-							// Use a lightweight image with yt-dlp installed
-							Image: "alpine/curl:latest",
-							// Command to install dependencies and then run yt-dlp
-							Command: []string{"sh", "-c"},
-							Args: []string{
-								"apk add --no-cache python3 py3-pip ffmpeg && " +
-									"pip install yt-dlp --break-system-packages && " +
-									"yt-dlp --no-mtime --ignore-errors -o '/data/%(title)s.%(ext)s' " + download.Spec.InputURL,
-							},
+							Name:            "yt-dlp-worker",
+							Image:           "alpine/curl:latest",
+							Command:         []string{"sh", "-c"},
+							Args:            []string{downloadCmd},
 							Env:             s3EnvVars,
+							VolumeMounts:    volumeMounts,
 							ImagePullPolicy: corev1.PullIfNotPresent,
 						},
 					},

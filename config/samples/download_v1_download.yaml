@@ -6,9 +6,9 @@ metadata:
     app.kubernetes.io/instance: download-sample
   name: test-download-live
 spec:
-  inputURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  inputURL: "https://www.youtube.com/watch?v=Wb3UrJjAac4"
   output:
     s3:
       bucket: "my-operator-downloads"
-      key: "rickroll.mp4"
+      key: "dog-eats-burrito-in-one-second.mp4"
       secretRef: "s3-creds"
