@@ -1,0 +1,9 @@
+apiVersion: download.beebs.dev/v1
+kind: Download
+metadata:
+  labels:
+    app.kubernetes.io/name: ytdlp-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: download-sample
+spec:
+  # TODO(user): Add fields here
