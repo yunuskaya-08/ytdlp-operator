@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -86,10 +88,26 @@ var _ = Describe("Download Controller", func() {
 			}, timeout, interval).Should(BeTrue())
 		})
 
-		It("should fail to find the Job, forcing the controller implementation", func() {
+		It("should successfully create and own a Kubernetes Job", func() {
 
-			By("Asserting the expected Job has NOT yet been created (This test MUST FAIL initially)")
+			// Re-fetch the reconciler instance (important for integration testing setup)
+			controllerReconciler := &DownloadReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
 
+			// CRITICAL STEP: Manually trigger the reconciliation loop once.
+			By("Manually calling Reconcile to trigger Job creation")
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			// Expect the Reconcile function to succeed (return no error)
+			Expect(err).NotTo(HaveOccurred(), "Reconcile failed during initial Job creation attempt")
+
+			// Now, we assert that the Job was created.
+			By("Asserting the expected Job has been created")
+
+			// The Job should now be found immediately.
 			Eventually(func() bool {
 				err := k8sClient.Get(ctx, jobLookupKey, createdJob)
 				return err == nil
