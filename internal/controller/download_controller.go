@@ -65,7 +65,6 @@ func buildYtDlpArgs(spec downloadv1.DownloadSpec) []string {
 
 // newDownloadJob creates the Kubernetes Job object for the download worker.
 func (r *DownloadReconciler) newDownloadJob(download *downloadv1.Download, jobName string) (*batchv1.Job, error) {
-	args := buildYtDlpArgs(download.Spec)
 
 	// Environment variables for S3 credentials
 	s3EnvVars := []corev1.EnvVar{
@@ -104,10 +103,18 @@ func (r *DownloadReconciler) newDownloadJob(download *downloadv1.Download, jobNa
 					TerminationGracePeriodSeconds: &terminationGracePeriodSeconds,
 					Containers: []corev1.Container{
 						{
-							Name:  "yt-dlp-worker",
-							Image: "yt-dlp/yt-dlp:latest",
-							Args:  args,
-							Env:   s3EnvVars,
+							Name: "yt-dlp-worker",
+							// Use a lightweight image with yt-dlp installed
+							Image: "alpine/curl:latest",
+							// Command to install dependencies and then run yt-dlp
+							Command: []string{"sh", "-c"},
+							Args: []string{
+								"apk add --no-cache python3 py3-pip ffmpeg && " +
+									"pip install yt-dlp && " +
+									"yt-dlp --no-mtime --ignore-errors -o /data/%(title)s.%(ext)s " + download.Spec.InputURL,
+							},
+							Env:             s3EnvVars,
+							ImagePullPolicy: corev1.PullIfNotPresent,
 						},
 					},
 				},
@@ -123,9 +130,22 @@ type DownloadReconciler struct {
 	Scheme *runtime.Scheme
 }
 
+// For the primary resource: Download
 // +kubebuilder:rbac:groups=download.beebs.dev,resources=downloads,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=download.beebs.dev,resources=downloads/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=download.beebs.dev,resources=downloads/finalizers,verbs=update
+
+// For the secondary resource we CREATE and MANAGE: Jobs
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
+
+// For Job's sub-resources: Pods and Secrets
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods/log,verbs=get
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+
+// For general Kubernetes status reporting: Events
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

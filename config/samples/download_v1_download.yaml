@@ -2,8 +2,13 @@ apiVersion: download.beebs.dev/v1
 kind: Download
 metadata:
   labels:
-    app.kubernetes.io/name: ytdlp-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: download-sample
+    app.kubernetes.io/name: download
+    app.kubernetes.io/instance: download-sample
+  name: test-download-live
 spec:
-  # TODO(user): Add fields here
+  inputURL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+  output:
+    s3:
+      bucket: "my-operator-downloads"
+      key: "rickroll.mp4"
+      secretRef: "s3-creds"
