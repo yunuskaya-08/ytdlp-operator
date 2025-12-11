@@ -30,9 +30,23 @@ type DownloadSpec struct {
 	// The following markers will use OpenAPI v3 schema to validate the value
 	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
 
-	// foo is an example field of Download. Edit download_types.go to remove/update
+	// InputURL is the source URL for yt-dlp to download (e.g., a YouTube or Vimeo link).
+	// +kubebuilder:validation:Required
+	InputURL string `json:"inputURL"`
+
+	// FormatSelection determines the video/audio quality and codec options.
+	// This maps directly to yt-dlp's --format/-f flag syntax.
+	// Example: "bestvideo[height<=1080]+bestaudio/best[height<=1080]"
 	// +optional
-	Foo *string `json:"foo,omitempty"`
+	FormatSelection string `json:"formatSelection,omitempty"`
+
+	// PostProcessing contains options for post-download operations like conversion.
+	// +optional
+	PostProcessing *PostProcessingConfig `json:"postProcessing,omitempty"`
+
+	// OutputTarget specifies where the final file should be stored.
+	// +kubebuilder:validation:Required
+	Output OutputConfig `json:"output"`
 }
 
 // DownloadStatus defines the observed state of Download.
@@ -40,22 +54,72 @@ type DownloadStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
+	// Phase represents the current state of the download job
+	// (e.g., Pending, Running, Completed, Failed).
+	// This tracks the overall lifecycle of the Download resource.
+	// +optional
+	Phase string `json:"phase,omitempty"`
+
+	// JobName is the name of the Kubernetes Job/Pod running the download.
+	// This is useful for debugging and tracking the underlying resource.
+	// +optional
+	JobName string `json:"jobName,omitempty"`
+
+	// DownloadRate reports the last known download speed (e.g., "10.3 MiB/s").
+	// Maps to bytes_per_second in the pseudo-manifest.
+	// +optional
+	DownloadRate string `json:"downloadRate,omitempty"`
+
+	// CompletionTime records when the download finished.
+	// +optional
+	CompletionTime *metav1.Time `json:"completionTime,omitempty"`
+
+	// ErrorMessage is set if the Phase is 'Failed'.
+	// +optional
+	ErrorMessage string `json:"errorMessage,omitempty"`
 
 	// conditions represent the current state of the Download resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
-	// The status of each condition is one of True, False, or Unknown.
 	// +listType=map
 	// +listMapKey=type
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// PostProcessingConfig defines steps like audio extraction or embedding metadata.
+type PostProcessingConfig struct {
+	// ExtractAudio converts the file to audio-only (e.g., mp3 or opus).
+	// Corresponds to yt-dlp '--extract-audio'.
+	// +optional
+	ExtractAudio bool `json:"extractAudio,omitempty"`
+
+	// AudioFormat specifies the output format for audio extraction (e.g., "mp3", "flac").
+	// Corresponds to yt-dlp '--audio-format'.
+	// +optional
+	AudioFormat string `json:"audioFormat,omitempty"`
+}
+
+// OutputConfig defines the destination for the downloaded file.
+type OutputConfig struct {
+	// S3 specifies the S3 bucket destination.
+	// +optional
+	S3 *S3Output `json:"s3,omitempty"`
+
+	// TODO: Add other outputs like PVC or Azure Blob here later
+}
+
+type S3Output struct {
+	// Bucket is the name of the S3 bucket.
+	// +kubebuilder:validation:Required
+	Bucket string `json:"bucket"`
+
+	// Key is the full path/filename within the bucket (e.g., "videos/myvideo.mp4").
+	// +kubebuilder:validation:Required
+	Key string `json:"key"`
+
+	// SecretRef refers to a Kubernetes Secret containing credentials for the S3 target.
+	// The Secret must contain keys like 'accessKeyID' and 'secretAccessKey'.
+	// +kubebuilder:validation:Required
+	SecretRef string `json:"secretRef"`
 }
 
 // +kubebuilder:object:root=true
